@@ -1,80 +1,137 @@
 import {extend, useFrame, useLoader} from '@react-three/fiber'
-import {Mesh, AmbientLight , BoxGeometry, MeshStandardMaterial} from "three";
-import {TextureLoader} from 'three'
+import {MathUtils, TextureLoader} from 'three'
 import {useRef, useState} from "react";
-extend({Mesh, AmbientLight, BoxGeometry, MeshStandardMaterial})
-
+import {FontLoader} from "three-stdlib";
+import {Center, Text3D} from "@react-three/drei";
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+// extend({TextGeometry})
 
 export default function BoxButton (
     {
         texturePath,
-        bobbingRange = 0.5,
-        bobbingIncrement = 0.005,
-        rotationIncrementActive = 0.02,
-        rotationIncrementInactive = 0.005,
-        maxScaleHover = 1.25,
-        scaleIncrement = 0.01,
-        pos = {x: 0, y: 0, z: 0}
+        bobbingRange = 1,
+        bobbingIncrement = 1,
+        rotationIncrementActive = 0.5,
+        rotationIncrementInactive = 0.1,
+        maxHoverScale = 1.25,
+        maxClickScale = 1.5,
+        pos: position = {x: 0, y: 0, z: 0},
+        label = "Hello, World!",
+        size = 5
     }) {
-    
+
     const t = useLoader(TextureLoader, texturePath)
-    const [rotationState, setRotationState] = useState(0)
-    const [hoverState, setHoverState] = useState(false)
-    const [bobbingState, setBobbingState] = useState(false)
-    const [scaleState, setScaleState] = useState(1)
-    const [yPos, setYPos] = useState(pos.y)
-    
-    
-    const out = <mesh
-        scale={scaleState}
-        position={[pos.x, yPos, pos.y]}
-        rotation={[rotationState, rotationState, rotationState]}
-        onPointerEnter={(e) => setHoverState(true)}
-        onPointerLeave={(e) => setHoverState(false)}
+    const f = useLoader(FontLoader, "/src/assets/Roboto_Bold.json")
 
-    >
-        <boxGeometry args={[2, 2, 2]}/>
-        <meshBasicMaterial map={t}/>
-    </mesh>
+    const bobbingState = useRef(false)
 
-    
-    const handleBobbing = () => {
-        if (bobbingState) {
-            setYPos(yPos + bobbingIncrement)
-            if (yPos > bobbingRange) {setBobbingState(false)}
+    const meshRef = useRef();
+    const clickTimeout = useRef(0)
+
+    const isHovered = useRef(false)
+
+
+    const handleBobbing = (delta) => {
+        if (bobbingState.current) {
+            meshRef.current.position.y += bobbingIncrement*delta;
+            if (meshRef.current.position.y > bobbingRange) {
+                bobbingState.current = false
+            }
         } else {
-            setYPos(yPos - bobbingIncrement)
-            if (yPos < -bobbingRange) {setBobbingState(true)}
-        }
-    }
-    
-    const handleRotation = () => {
-        if (hoverState) {
-            setRotationState(rotationState+ rotationIncrementActive)
-        } else {
-            setRotationState(rotationState+ rotationIncrementInactive)
-        }
-    }
-    
-    const handleHoverResizing = () => {
-        if (hoverState && scaleState <= maxScaleHover) {
-            setScaleState(scaleState + scaleIncrement)
-        } else if (scaleState >= 1) {
-            setScaleState(scaleState - scaleIncrement)
+            meshRef.current.position.y -= bobbingIncrement*delta;
+            if (meshRef.current.position.y < -bobbingRange) {
+                bobbingState.current = true;
+            }
         }
     }
 
-    const handleClickResizing = () => {}
-    
-    useFrame(() => {
-        handleBobbing()
-        handleRotation()
-        handleHoverResizing()
+    const handleRotation = (delta) => {
+        meshRef.current.rotation.y += delta * (isHovered.current ? rotationIncrementActive : rotationIncrementInactive)
+    }
 
-        
-        
+    const handleResizing = (delta) => {
+        //We need a cool ahh way to resize the thingy
+        //When our scale is less than the max, we grow it
+        //When our scale is greater than the max, we shrink it
+        if (clickTimeout.current > 0) {clickTimeout.current = Math.max(clickTimeout.current-delta, 0)}
+        const newscale = MathUtils.damp(
+            meshRef.current.scale.x,
+            clickTimeout.current > 0 ? maxClickScale : isHovered.current ? maxHoverScale : 1,
+            0.1,
+            delta * 100
+        )
+        meshRef.current.scale.x = newscale;
+        meshRef.current.scale.y = newscale;
+        meshRef.current.scale.z = newscale;
+    }
 
+    useFrame((state, delta, frame) => {
+        handleBobbing(delta)
+        handleRotation(delta)
+        handleResizing(delta)
     })
-    return out
+
+    const sz = size;
+
+
+
+    return <group
+        ref={meshRef}
+        position={[position.x, position.y, position.z]}
+        onPointerEnter={() => {isHovered.current = true;}}
+        onPointerLeave={() => {isHovered.current = false;}}
+        onClick={() => {clickTimeout.current=0.25}}
+    >
+        <mesh>
+            <boxGeometry args={[sz, sz, sz]}/>
+            <meshBasicMaterial map={t}/>
+        </mesh>
+
+        <group position={[0, 0, sz / 2]}>
+            <Center>
+                <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 0, 0]} bevelEnabled={true}
+                        bevelSize={0}
+                        bevelOffset={0}
+                        size={sz / 10}>
+                    {label}
+                    <meshNormalMaterial/>
+                </Text3D>
+            </Center>
+
+        </group>
+
+        <group position={[0, 0, -sz / 2]} scale={[-1, 1, 1]}>
+            <Center>
+                <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 0, 0]} bevelEnabled={true}
+                        size={sz / 10}>
+                    {label}
+                    <meshNormalMaterial/>
+                </Text3D>
+            </Center>
+
+        </group>
+
+        <group position={[sz / 2, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <Center>
+                <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 0, 0]} bevelEnabled={true}
+                        size={sz / 10}>
+                    {label}
+                    <meshNormalMaterial/>
+                </Text3D>
+            </Center>
+
+        </group>
+
+        <group position={[-sz / 2, 0, 0]} scale={[-1, 1, 1]} rotation={[0, Math.PI / 2, 0]}>
+            <Center>
+                <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 0, 0]} bevelEnabled={true}
+                        size={sz / 10}>
+                    {label}
+                    <meshNormalMaterial/>
+                </Text3D>
+            </Center>
+
+        </group>
+    </group>
 }
 
