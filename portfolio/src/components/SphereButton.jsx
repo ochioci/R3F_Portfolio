@@ -5,7 +5,7 @@ import {FontLoader} from "three-stdlib";
 import {Center, Text3D} from "@react-three/drei";
 import * as THREE from "three";
 import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing'
-export default function BoxButton (
+export default function SphereButton (
     {
         texturePath,
         bobbingRange = 1,
@@ -19,8 +19,9 @@ export default function BoxButton (
         size = 5,
         hoverGlowIntensity = 2,
         clickGlowIntensity = 5,
-        labelColor = "green",
+        labelColor = "blue",
         clickCallback = () => {}
+
     }) {
 
     const t = useLoader(TextureLoader, texturePath)
@@ -99,12 +100,12 @@ export default function BoxButton (
         onPointerDown={() => {
             clickTimeout.current = 0.25;
         }}
-        onClick ={() => {
-            clickCallback()
-        }}
+        onClick = {
+            () => {clickCallback()}
+        }
     >
         <mesh>
-            <boxGeometry args={[sz, sz, sz]}/>
+            <sphereGeometry args={[sz/2]}/>
             <meshStandardMaterial map={t} emissiveIntensity={100} toneMapped={false}/>
             <EffectComposer>
                 <Bloom mipmapBlur ref={bloomRef} intensity={0} luminanceThreshold={0}/>
