@@ -16,25 +16,25 @@ function App() {
 
 
     return <div id="canvas-container">
-        <Canvas camera={{ fov: 75, near: 0.1, far: 1000, position: [0, 0, 25] }}>
+        <Canvas camera={{ fov: 75, near: 0.1, far: 1000, position: [0, 5, 10] }}>
 
             <ambientLight intensity={5}/>
             <Suspense fallback={null}>
-                {/*<FaceCamera>*/}
-                    <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 0, 0]} bevelEnabled={true}
+                <FaceCamera>
+                    <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 0, 0]} rotation={[-0.25, -0.1, 0]} bevelEnabled={true}
                             bevelSize={0}
                             bevelOffset={0}
-                            size={2}>
+                            size={1}>
                         Hello, World
                         <meshNormalMaterial/>
                     </Text3D>
-                {/*</FaceCamera>*/}
+                </FaceCamera>
 
 
             </Suspense>
             <gridHelper args={[100,10]}/>
             <OrbitControls/>
-            <MouseMoveControls></MouseMoveControls>
+            {/*<MouseMoveControls></MouseMoveControls>*/}
         </Canvas>
     </div>
 }

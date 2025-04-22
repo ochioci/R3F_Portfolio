@@ -13,7 +13,11 @@ export default function FaceCamera({children}) {
     const groupRef = useRef()
 
     useFrame( (state, delta, frame) => {
-        groupRef.current.lookAt(state.camera.position)
+
+        raycaster.current.setFromCamera(state.pointer, camera)
+        // console.log(state.pointer.x, state.pointer.y, state.camera.position.z)
+        groupRef.current.lookAt(raycaster.current.ray.direction)
+        console.log(raycaster.current.ray.direction)
     })
 
 
