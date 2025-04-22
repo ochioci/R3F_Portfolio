@@ -1,6 +1,6 @@
 
 import {Canvas, extend} from "@react-three/fiber";
-import {OrbitControls, Text3D} from "@react-three/drei"
+import {Center, OrbitControls, Text3D} from "@react-three/drei"
 import BoxButton from "./components/BoxButton.jsx";
 import {Suspense, useRef} from "react";
 import './style.css'
@@ -20,15 +20,21 @@ function App() {
 
             <ambientLight intensity={5}/>
             <Suspense fallback={null}>
-                <FaceCamera>
-                    <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 0, 0]} rotation={[-0.25, -0.1, 0]} bevelEnabled={true}
-                            bevelSize={0}
-                            bevelOffset={0}
-                            size={1}>
-                        Hello, World
-                        <meshNormalMaterial/>
-                    </Text3D>
-                </FaceCamera>
+
+
+                {/*center tag must be inside of FaceCamera*/}
+                    <FaceCamera>
+                        <Center>
+                            <Text3D font={"/src/assets/Roboto_Bold.json"} scale={[1, 1, 1]} position={[0, 5, 0]} rotation={[-0.25, -0.1, 0]} bevelEnabled={true}
+                                    bevelSize={0}
+                                    bevelOffset={0}
+                                    size={5}>
+                                Hello, World
+                                <meshNormalMaterial/>
+                            </Text3D>
+                        </Center>
+                    </FaceCamera>
+
 
 
             </Suspense>

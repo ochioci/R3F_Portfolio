@@ -3,7 +3,7 @@ import {useRef} from "react";
 import {useFrame, useThree} from "@react-three/fiber";
 import {Vector3} from "three";
 
-export default function FaceCamera({children}) {
+export default function FaceCamera({children, yOffset = 10}) {
 
     const raycaster = useRef(new THREE.Raycaster())
     const pointer = useRef(new THREE.Vector2())
@@ -13,15 +13,16 @@ export default function FaceCamera({children}) {
     const groupRef = useRef()
 
     useFrame( (state, delta, frame) => {
-
         raycaster.current.setFromCamera(state.pointer, camera)
-        // console.log(state.pointer.x, state.pointer.y, state.camera.position.z)
+        const v =raycaster.current.ray.direction
+        v.y -= yOffset
+        v.y *= -1
+        v.x *= -1
         groupRef.current.lookAt(raycaster.current.ray.direction)
-        console.log(raycaster.current.ray.direction)
     })
 
 
-    return <group ref={groupRef}>
+    return <group position={[0,yOffset, 0]} scale={[-1,1,1]} ref={groupRef}>
 
         {children}
     </group>
