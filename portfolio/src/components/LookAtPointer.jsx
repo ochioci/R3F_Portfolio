@@ -3,7 +3,7 @@ import {useRef} from "react";
 import {useFrame, useThree} from "@react-three/fiber";
 import {Vector3} from "three";
 
-export default function FaceCamera({children, yOffset = 10}) {
+export default function LookAtPointer({children, yOffset = 10}) {
 
     const raycaster = useRef(new THREE.Raycaster())
     const pointer = useRef(new THREE.Vector2())
