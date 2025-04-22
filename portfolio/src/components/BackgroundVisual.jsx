@@ -39,30 +39,53 @@ export default function BackgroundVisual({
 }
 
 function Vertices({data, r}) {
+    // useEffect(() => {
+    //     ref.current.children.forEach(child => {
+    //         console.log(child.children)
+    //     })
+    // })
+
+    const dataRef = useRef(data)
     const ref = useRef()
-    useEffect(() => {
-        console.log(ref.current)
+
+    useEffect( () => {
+        let vcount = 0;
+        let ecount = 0;
+        ref.current.children.forEach((child) => {
+            if (child.isLine2 == undefined) {
+                console.log("vertex", vcount, child.position)
+                vcount++
+            } else {
+                console.log("edge", ecount, child.geometry.attributes.instanceStart.data.array)
+                ecount++
+            }
+        })
+
+        //the edges that follow the Ith vertex of ref.current.children correspond to the lines
+        //which go from vertex I to vertex I+1, then  from vertex I to vertex I+2, then from vertex I to vertex I+3 respectively
+        //We go through the vertices first, applying our desired deltas to each one
+        //Then, go through the entire list of children
+            //for each of the lines we encounter we simply use setPosition or setFromPoints on the line's geometry to update it to the new deltas
+
     })
 
-    const getGeometry = (data) => {
-        const out = []
-        for (let i = 0; i < data.length-1; i++) {
-            const temp = <group  key={i}>
-                <mesh position={data[i]}>
-                    <meshBasicMaterial color={"red"}/>
-                    <sphereGeometry args={[r]}/>
-
-                </mesh>
-                <Line points={[data[i], data[i+1]]} color={"black"} lineWidth={5}></Line>
-            </group>
-
-            out.push(temp)
-        }
-        return out
-    }
-
     return <group ref={ref}>
-        {getGeometry(data)}
+        <GetGeometry data={data} r={r}></GetGeometry>
     </group>
 }
 
+function GetGeometry({data, r}) {
+
+    const out = []
+    for (let i = 0; i < data.length; i++) {
+        out.push(<mesh position={data[i]} key={i*4}>
+            <meshBasicMaterial color={"red"}/>
+            <sphereGeometry args={[r]}/>
+        </mesh>)
+        out.push(i < data.length-1 ? <Line key={i*4+1} points={ [data[i], data[i + 1]]} color={"black"} lineWidth={5}></Line> : null)
+        out.push(i < data.length-2 ? <Line key={i*4+2} points={[data[i], data[i + 2]]} color={"black"} lineWidth={5}></Line> : null)
+        out.push(i < data.length-3 ? <Line key={i*4+3} points={[data[i], data[i + 3]]} color={"black"} lineWidth={5}></Line> : null)
+    }
+    return out
+
+}
