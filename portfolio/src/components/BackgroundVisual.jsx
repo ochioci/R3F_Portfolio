@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from "react";
 import {
-    BufferGeometry, LineBasicMaterial,
+    BufferAttribute, BufferGeometry,
+    LineBasicMaterial,
     Mesh,
     MeshBasicMaterial,
     Object3D,
@@ -8,7 +9,7 @@ import {
     SphereGeometry,
     Vector3
 } from "three";
-import {Instance, Instances, Line} from "@react-three/drei";
+import {Helper, Instance, Instances, Line} from "@react-three/drei";
 import {LineGeometry} from "three-stdlib";
 import {invalidate, useFrame} from "@react-three/fiber";
 
@@ -39,34 +40,65 @@ export default function BackgroundVisual({
 }
 
 function Vertices({data, r}) {
-    // useEffect(() => {
-    //     ref.current.children.forEach(child => {
-    //         console.log(child.children)
-    //     })
-    // })
-
     const dataRef = useRef(data)
     const ref = useRef()
 
-    useEffect( () => {
-        let vcount = 0;
-        let ecount = 0;
+    //the edges that follow the Ith vertex of ref.current.children correspond to the lines
+    //which go from vertex I to vertex I+1, then  from vertex I to vertex I+2, then from vertex I to vertex I+3 respectively
+    //We go through the vertices first, applying our desired deltas to each one
+    //Then, go through the entire list of children
+        //for each of the lines we encounter we simply use setPosition or setFromPoints on the line's geometry to update it to the new deltas
+
+    const signedRand = () => Math.random() - 0.5
+
+    useFrame( (state, delta, frame) => {
+        let vertices = []
+        let edges=[]
         ref.current.children.forEach((child) => {
-            if (child.isLine2 == undefined) {
-                console.log("vertex", vcount, child.position)
-                vcount++
+            if (child.geometry.type == "SphereGeometry") {
+                // console.log( child.position)
+                child.position.x += signedRand() * delta * 10
+                child.position.y += signedRand() * delta* 10
+                child.position.z += signedRand() * delta * 10
+                vertices.push(child)
+                // console.log("vert: ", child)
             } else {
-                console.log("edge", ecount, child.geometry.attributes.instanceStart.data.array)
-                ecount++
+                // console.log("edge", ecount, child.geometry.attributes.instanceStart.data.array)
+                // console.log("edge: ", child)
+                edges.push(child)
+
             }
         })
+        console.log(edges)
+        //adjust edges to match changed vertices
 
-        //the edges that follow the Ith vertex of ref.current.children correspond to the lines
-        //which go from vertex I to vertex I+1, then  from vertex I to vertex I+2, then from vertex I to vertex I+3 respectively
-        //We go through the vertices first, applying our desired deltas to each one
-        //Then, go through the entire list of children
-            //for each of the lines we encounter we simply use setPosition or setFromPoints on the line's geometry to update it to the new deltas
+        // const a = vertices[vert].position
+        // const b = vertices[vert + 1 + (i % 3)].position
+        // edges[i].geometry.setAttribute('position', new BufferAttribute(new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z]), 3))
 
+        let edge = 0
+        for (let v = 0; v < vertices.length && edge < edges.length; v++) {
+            //vertex v has an edge w the next three vertices
+
+            const a = vertices[v].position
+            //
+                for (let n = 1; n < 4 && v+n < vertices.length; n++) {
+                    const b = vertices[v+n].position
+
+
+                    // console.log("edge:", edge+n-1, "a:", v, "b:", v+n)
+                    const position = new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z])
+                    const br =  new BufferAttribute(position, 3)
+                    br.needsUpdate = true
+                    // br.onUploadCallback = () => {console.log('how')}
+                    edges[edge+n-1].geometry.setAttribute('position', br)
+                    // edges[edge+n-1].geometry.setIndex(indices)
+                    // edges[edge+n-1].geometry.attributes.position.needsUpdate = true
+                }
+            edge+=3;
+        }
+
+        // state.invalidate()
     })
 
     return <group ref={ref}>
@@ -82,9 +114,45 @@ function GetGeometry({data, r}) {
             <meshBasicMaterial color={"red"}/>
             <sphereGeometry args={[r]}/>
         </mesh>)
-        out.push(i < data.length-1 ? <Line key={i*4+1} points={ [data[i], data[i + 1]]} color={"black"} lineWidth={5}></Line> : null)
-        out.push(i < data.length-2 ? <Line key={i*4+2} points={[data[i], data[i + 2]]} color={"black"} lineWidth={5}></Line> : null)
-        out.push(i < data.length-3 ? <Line key={i*4+3} points={[data[i], data[i + 3]]} color={"black"} lineWidth={5}></Line> : null)
+        // out.push(i < data.length-1 ? <Line key={i*4+1} points={ [data[i], data[i + 1]]} color={"black"} lineWidth={5}></Line> : null)
+        // out.push(i < data.length-2 ? <Line key={i*4+2} points={[data[i], data[i + 2]]} color={"black"} lineWidth={5}></Line> : null)
+        // out.push(i < data.length-3 ? <Line key={i*4+3} points={[data[i], data[i + 3]]} color={"black"} lineWidth={5}></Line> : null)
+
+        out.push(i < data.length - 1 ? <line key={i*4+1}>
+            {/*<Helper ></Helper>*/}
+            <bufferGeometry>
+                <bufferAttribute
+                    needsUpdate
+                    attach={"position"}
+                    array = {new Float32Array(6).fill(0)}
+                    itemSize = {3}
+                />
+            </bufferGeometry>
+            <primitive object={new LineBasicMaterial()} attach={"material"}/>
+        </line> : null)
+        out.push(i < data.length - 2 ? <line key={i * 4 + 2}>
+            <bufferGeometry>
+                <bufferAttribute
+                    needsUpdate
+                    attach={"position"}
+                    array={new Float32Array(6).fill(0)}
+                    itemSize={3}
+                />
+            </bufferGeometry>
+            <primitive object={new LineBasicMaterial()} attach={"material"}/>
+        </line> : null)
+        out.push(i < data.length - 3 ? <line key={i * 4 + 3}>
+            <bufferGeometry>
+                <bufferAttribute
+                    needsUpdate
+                    attach={"position"}
+                    array={new Float32Array(6).fill(0)}
+                    itemSize={3}
+                />
+            </bufferGeometry>
+            <primitive object={new LineBasicMaterial()} attach={"material"}/>
+        </line> : null)
+
     }
     return out
 

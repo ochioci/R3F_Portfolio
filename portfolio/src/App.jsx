@@ -10,7 +10,7 @@ import MouseMoveControls from "./components/MouseMoveControls.jsx";
 import BackgroundVisual from "./components/BackgroundVisual.jsx";
 // import BoxButton from "./components/BoxButton.jsx"
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
-import {LineBasicMaterial, Vector3} from "three";
+import {BufferAttribute, BufferGeometry, LineBasicMaterial, Vector3} from "three";
 extend({LineGeometry})
 
 
@@ -18,7 +18,15 @@ extend({LineGeometry})
 function App() {
 
 
-
+    const getLine = (a,b,c,d,e,f) => <mesh>
+        <primitive object={(() => {
+            const l = new BufferGeometry()
+            const position = new Float32Array([0,0,0,10,10,10])
+            l.setAttribute('position', new BufferAttribute(position, 3))
+            return l;
+        })()} attach={"geometry"}/>
+        <primitive object={new LineBasicMaterial({color: 0x00FF00, linewidth: 5})} attach={'material'}/>
+    </mesh>
 
     return <div id="canvas-container">
         <Canvas camera={{fov: 75, near: 0.1, far: 1000, position: [0, 5, 10]}}>
@@ -41,10 +49,12 @@ function App() {
                     </Center>
                 </LookAtPointer>
 
-                <BackgroundVisual></BackgroundVisual>
 
+
+                {getLine(0,0,0,0,10,0)}
 
             </Suspense>
+            <BackgroundVisual></BackgroundVisual>
             <gridHelper args={[100, 10]}/>
             <OrbitControls/>
             {/*<MouseMoveControls></MouseMoveControls>*/}
