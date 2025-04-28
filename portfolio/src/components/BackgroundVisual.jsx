@@ -1,10 +1,9 @@
 import {useRef} from "react";
 import {
-    BufferAttribute, MathUtils, Object3D, Vector3
+    MathUtils, Object3D, Raycaster, Vector3,
 } from "three";
-import {useFrame} from "@react-three/fiber";
-const signedRand = () => Math.random() - 0.5
-const pointDistance  = (p1, p2) => (((p1.x - p2.x) ** 2) + ((p1.y - p2.y) ** 2) + ((p1.z - p2.z) ** 2)) ** 0.5
+import {useFrame, useThree} from "@react-three/fiber";
+const pointDistance  = (p1, p2) => Math.sqrt(((p1[0] - p2[0]) ** 2) + ((p1[1] - p2[1]) ** 2) + ((p1[2] - p2[2]) ** 2))
 class spherePoint {
     constructor(theta, phi, rho) {
         this.theta = theta
@@ -16,11 +15,6 @@ class spherePoint {
     }
 
     getCartesian() {
-        // return {
-        //     x: this.rho * Math.cos(this.theta) * Math.sin(this.phi),
-        //     y: this.rho * Math.sin(this.theta) * Math.sin(this.phi),
-        //     z: this.rho * Math.cos(this.phi)
-        // }
         return [
             this.rho * Math.cos(this.theta) * Math.sin(this.phi),
             this.rho * Math.sin(this.theta) * Math.sin(this.phi),
@@ -38,88 +32,64 @@ class spherePoint {
         this.phi %= Math.PI * 2
         this.vTheta %= Math.PI * 2
         this.vPhi %= Math.PI * 2
-
-
         this.theta += this.vTheta * delta;
         this.phi += this.vPhi * delta;
         this.vTheta *= this.efficiency;
         this.vPhi *= this.efficiency;
     }
 }
-class sphereVisual {
-    constructor(radius=10,
-                numVertices = 10,
-                edgeDistance = 1,
-                groupRef,
-                edgesRef
-    ) {
-        this.vertices = Array(numVertices).fill(0).map((_) => new spherePoint(Math.random() * 2 * Math.PI,Math.random() * Math.PI,radius))
-        this.groupRef = groupRef;
-        this.edgesRef = edgesRef;
-        this.numVertices = numVertices;
-        this.numEdges = numVertices ** 2;
-        this.radius = radius
-    }
 
-    handleMotion(delta) {
-
-        if (this.vertices.length != this.groupRef.current.children.length) {return;}
-
-        for (let i = 0; i < this.vertices.length; i++) {
-            this.vertices[i].accelerate(signedRand(), signedRand(), delta)
-            this.vertices[i].tick(delta)
-
-            const cartesian = this.vertices[i].getCartesian()
-            this.groupRef.current.children[i].position.setX(cartesian.x)
-            this.groupRef.current.children[i].position.setY(cartesian.y)
-            this.groupRef.current.children[i].position.setZ(cartesian.z)
-        }
-        // console.log("num vertices: ", this.vertices.length)
-        // console.log("num children: ", this.groupRef.current.children.length);
-    }
-
-    updateEdges() {
-        if (this.numEdges != this.edgesRef.current.children.length) {
-            return;
-        }
-        let p1
-        let p2
-        for (let i = 0; i < this.numVertices; i++) {
-            p1 = this.vertices[i].getCartesian();
-            for (let n = 0; n < this.numVertices; n++) {
-                if (i != n) { //update edge from i to n
-
-                    p2 = this.vertices[n].getCartesian();
-                    const position = new Float32Array([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z])
-                    const temp = new BufferAttribute(position, 3)
-                    this.edgesRef.current.children[(i * this.numVertices) + n].geometry.setAttribute('position', temp)
-                    this.edgesRef.current.children[(i * this.numVertices) + n].material.opacity = Math.min(1, Math.max(0, this.radius - pointDistance(p1,p2)))
-                }
-            }
-        }
-    }
-}
 export default function BackgroundVisual({
-    radius = 50,
-    numVertices = 50,
-    edgeDistance = 1
-}) {
+        radius = 50,
+        numVertices = 250,
+        edgeDistance = 1,
+        maxEdgeLen = 25,
+    }) {
 
     const tempObject = new Object3D()
     const tempObjectEdge = new Object3D()
     const verticesRef = useRef(Array(numVertices).fill(0).map((_) => {
-        return new spherePoint(Math.random() * 2 * Math.PI,Math.random() * Math.PI, radius)
+        return new spherePoint(MathUtils.randFloat(0, 2)  * Math.PI,MathUtils.randFloat(0, 1) * Math.PI, radius )
     }))
     const edgeRef = useRef()
     const meshRef = useRef()
+    const helperRef = useRef()
+    const raycaster = useRef(new Raycaster())
+    const lastHoverRef = useRef(new Vector3(0,0,0))
 
+
+    const camera = useThree(state => state.camera)
+    const cartesianToSpherical = ({x, y, z}) => {
+        let phi = Math.acos(z / Math.sqrt( (x*x) + (y*y) + (z*z) ))
+        let theta;
+        if ( x > 0) { theta = Math.atan(y/x)}
+        else if (x < 0 && y >= 0) { theta = Math.atan(y/x) + Math.PI}
+        else if (x < 0 && y < 0) {theta = Math.atan(y/x) - Math.PI}
+        else if (x == 0 && y > 0) {theta = Math.PI / 2}
+        else if (x == 0 && y < 0) {theta = -Math.PI / 2}
+        else {theta = 0}
+        return [theta, phi]
+    }
     useFrame( (state, delta, frame) => {
 
 
-        //UPDATE VERTICES
+
+        helperRef.current.position.x = lastHoverRef.current.x
+        helperRef.current.position.y = lastHoverRef.current.y
+        helperRef.current.position.z = lastHoverRef.current.z
+        //we now have a way of detecting hovers using vertices and edges
+        //maybe we can with transparent sphere instead
+        //now, for each vertex, we get the direction from vertex to hover point
+        //convert hover point to spherical
+        //convert vertex to spherical
+        //simply subtract the hover phi,theta from vertex, then apply that delta to acceleration
+
+
+
+            //UPDATE VERTICES
         let tempPos;
         for (let i = 0; i < numVertices; i++) {
-            verticesRef.current[i].accelerate(signedRand(), signedRand(), delta * 0.1)
+            verticesRef.current[i].accelerate(MathUtils.randFloatSpread(0.5 ), MathUtils.randFloatSpread(0.5 ), delta )
             verticesRef.current[i].tick(delta )
             tempPos = verticesRef.current[i].getCartesian()
             tempObject.position.set(...tempPos)
@@ -132,33 +102,33 @@ export default function BackgroundVisual({
 
         //UPDATE EDGES
         for (let i = 0; i < numVertices; i++) {
-            for (let n = i+1; n < numVertices; n++) {
-                // edge (i * numVertices) + n represents the edge from vertex i to vertex n
-                const pos_i = verticesRef.current[i].getCartesian()
-                const pos_n = verticesRef.current[n].getCartesian()
+            for (let n = 0; n < numVertices; n++) {
+                // edge i * numVertices + n represents the edge from vertex i to vertex n
+                let pos_i
+                let pos_n
+                let dist;
+                if (n > i) {
+                    pos_i = verticesRef.current[i].getCartesian()
+                    pos_n = verticesRef.current[n].getCartesian()
 
-                const dist = pointDistance(new Vector3(...pos_i), new Vector3(...pos_n))
+                    dist = pointDistance(pos_i, pos_n)
 
-                tempObjectEdge.position.setX(MathUtils.lerp(pos_i[0], pos_n[0], 0.5))
-                tempObjectEdge.position.setY(MathUtils.lerp(pos_i[1], pos_n[1], 0.5))
-                tempObjectEdge.position.setZ(MathUtils.lerp(pos_i[2], pos_n[2], 0.5))
+                    tempObjectEdge.position.setX(MathUtils.lerp(pos_i[0], pos_n[0], 0.5))
+                    tempObjectEdge.position.setY(MathUtils.lerp(pos_i[1], pos_n[1], 0.5))
+                    tempObjectEdge.position.setZ(MathUtils.lerp(pos_i[2], pos_n[2], 0.5))
+                }
 
-
-                if (dist > 15) {
+                if (n <= i || dist > 25) {
                     tempObjectEdge.scale.setX(0)
                     tempObjectEdge.scale.setY(0)
                     tempObjectEdge.scale.setZ(0)
                 } else {
-                    tempObjectEdge.scale.setX(dist /100)
-                    tempObjectEdge.scale.setY(dist/ 100)
+                    tempObjectEdge.scale.setX((dist-maxEdgeLen) / 200)
+                    tempObjectEdge.scale.setY((dist-maxEdgeLen)/ 200)
                     tempObjectEdge.scale.setZ(dist)
                     tempObjectEdge.lookAt(...pos_n)
                 }
-                //what if we put edge at the midpoint between i and n
-
-
                 tempObjectEdge.updateMatrix();
-
                 edgeRef.current.setMatrixAt((i * numVertices) + n, tempObjectEdge.matrix)
             }
         }
@@ -171,19 +141,31 @@ export default function BackgroundVisual({
         <instancedMesh
             args={[null, null, numVertices]}
             ref={meshRef}
+            onPointerMove={
+                (e) => {lastHoverRef.current = e.point}
+            }
         >
-            <sphereGeometry args={[1]}/>
+
+            <sphereGeometry args={[0.25]}/>
             <meshBasicMaterial color={"red"}/>
         </instancedMesh>
 
         <instancedMesh
-            args={[null, null, numVertices * numVertices]}
+            args={[null, null, (numVertices * numVertices) - 1]}
             ref={edgeRef}
+            onPointerMove={
+                (e) => {lastHoverRef.current = e.point}
+            }
         >
             <boxGeometry args={[1,1,1]}/>
             <meshBasicMaterial color={"blue"}/>
 
         </instancedMesh>
+
+        <mesh ref={helperRef}>
+            <boxGeometry args={[2,2,2]}/>
+            <meshNormalMaterial/>
+        </mesh>
     </group>
 
 }
