@@ -1,39 +1,31 @@
-import {useEffect, useRef, useState} from "react";
+import {useRef} from "react";
 import {
-    BufferAttribute, BufferGeometry,
-    LineBasicMaterial,
-    Mesh,
-    MeshBasicMaterial,
-    Object3D,
-    Raycaster,
-    SphereGeometry,
-    Vector3
+    BufferAttribute, MathUtils, Object3D, Vector3
 } from "three";
-import {Helper, Instance, Instances, Line} from "@react-three/drei";
-import {LineGeometry} from "three-stdlib";
-import {invalidate, useFrame} from "@react-three/fiber";
-
+import {useFrame} from "@react-three/fiber";
 const signedRand = () => Math.random() - 0.5
 const pointDistance  = (p1, p2) => (((p1.x - p2.x) ** 2) + ((p1.y - p2.y) ** 2) + ((p1.z - p2.z) ** 2)) ** 0.5
-
 class spherePoint {
     constructor(theta, phi, rho) {
         this.theta = theta
         this.phi = phi
         this.rho = rho
-
         this.vTheta = 0;
         this.vPhi = 0;
-
         this.efficiency = 0.99;
     }
 
     getCartesian() {
-        return new Vector3(
+        // return {
+        //     x: this.rho * Math.cos(this.theta) * Math.sin(this.phi),
+        //     y: this.rho * Math.sin(this.theta) * Math.sin(this.phi),
+        //     z: this.rho * Math.cos(this.phi)
+        // }
+        return [
             this.rho * Math.cos(this.theta) * Math.sin(this.phi),
             this.rho * Math.sin(this.theta) * Math.sin(this.phi),
             this.rho * Math.cos(this.phi)
-        )
+        ]
     }
 
     accelerate(theta_, phi_, delta) {
@@ -42,13 +34,18 @@ class spherePoint {
     }
 
     tick(delta) {
+        this.theta %= Math.PI * 2
+        this.phi %= Math.PI * 2
+        this.vTheta %= Math.PI * 2
+        this.vPhi %= Math.PI * 2
+
+
         this.theta += this.vTheta * delta;
         this.phi += this.vPhi * delta;
         this.vTheta *= this.efficiency;
         this.vPhi *= this.efficiency;
     }
 }
-
 class sphereVisual {
     constructor(radius=10,
                 numVertices = 10,
@@ -56,12 +53,12 @@ class sphereVisual {
                 groupRef,
                 edgesRef
     ) {
-        //meshRef should be a ref to the object which has the vertex meshes as children
         this.vertices = Array(numVertices).fill(0).map((_) => new spherePoint(Math.random() * 2 * Math.PI,Math.random() * Math.PI,radius))
         this.groupRef = groupRef;
         this.edgesRef = edgesRef;
         this.numVertices = numVertices;
         this.numEdges = numVertices ** 2;
+        this.radius = radius
     }
 
     handleMotion(delta) {
@@ -81,153 +78,114 @@ class sphereVisual {
         // console.log("num children: ", this.groupRef.current.children.length);
     }
 
-    //to mutate buffer geometry
-// const position = new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z])
-// const br =  new BufferAttribute(position, 3)
-// br.needsUpdate = true
-// mesh.geometry.setAttribute('position', br)
     updateEdges() {
-        // console.log("nominal edges:", this.vertices.length ** 2)
-        // console.log("real edges: ", this.edgesRef.current.children.length)
         if (this.numEdges != this.edgesRef.current.children.length) {
             return;
         }
-
+        let p1
+        let p2
         for (let i = 0; i < this.numVertices; i++) {
+            p1 = this.vertices[i].getCartesian();
             for (let n = 0; n < this.numVertices; n++) {
-
                 if (i != n) { //update edge from i to n
-                    const p1 = this.vertices[i].getCartesian();
-                    const p2 = this.vertices[n].getCartesian();
+
+                    p2 = this.vertices[n].getCartesian();
                     const position = new Float32Array([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z])
                     const temp = new BufferAttribute(position, 3)
-                    temp.needsUpdate = true;
                     this.edgesRef.current.children[(i * this.numVertices) + n].geometry.setAttribute('position', temp)
-
-                    // const mat = new LineBasicMaterial({color: 0x00FF00, transparent: true})
-                    // mat.opacity = 0.1
-                    this.edgesRef.current.children[(i * this.numVertices) + n].material.opacity = Math.min(1, Math.max(0, 10 - pointDistance(p1,p2)))
-                    this.edgesRef.current.children[(i * this.numVertices) + n].needsUpdate = true
-                    // console.log(this.edgesRef.current.children[(i * this.numVertices) + n].material)
+                    this.edgesRef.current.children[(i * this.numVertices) + n].material.opacity = Math.min(1, Math.max(0, this.radius - pointDistance(p1,p2)))
                 }
-
             }
         }
     }
 }
-
 export default function BackgroundVisual({
-    radius = 10,
-    numVertices = 25,
+    radius = 50,
+    numVertices = 50,
     edgeDistance = 1
 }) {
 
-    //Goal: Facilitate a visual where a given number of vertices move around the surface of a sphere in a natural motion
-    //Edges will be drawn between vertices with opacity greater as the distance is closer to edgeDistance
-    //Points will be processed in spherical coordinates and converted into cartesian when necessary
+    const tempObject = new Object3D()
+    const tempObjectEdge = new Object3D()
+    const verticesRef = useRef(Array(numVertices).fill(0).map((_) => {
+        return new spherePoint(Math.random() * 2 * Math.PI,Math.random() * Math.PI, radius)
+    }))
+    const edgeRef = useRef()
+    const meshRef = useRef()
 
-    const groupRef = useRef();
-    const edgesRef = useRef();
-    const controllerRef = useRef(new sphereVisual(radius, numVertices, edgeDistance, groupRef, edgesRef));
+    useFrame( (state, delta, frame) => {
 
-    useFrame((state, delta, frame) => {
-        controllerRef.current.handleMotion(delta)
 
-        if (Math.random() > 0.5){
-            controllerRef.current.updateEdges()
-
+        //UPDATE VERTICES
+        let tempPos;
+        for (let i = 0; i < numVertices; i++) {
+            verticesRef.current[i].accelerate(signedRand(), signedRand(), delta * 0.1)
+            verticesRef.current[i].tick(delta )
+            tempPos = verticesRef.current[i].getCartesian()
+            tempObject.position.set(...tempPos)
+            tempObject.updateMatrix();
+            meshRef.current.setMatrixAt(i, tempObject.matrix)
         }
+        meshRef.current.instanceMatrix.needsUpdate = true //ABSOLUTELY ESSENTIAL
+        //END UPDATE VERTICES
+
+
+        //UPDATE EDGES
+        for (let i = 0; i < numVertices; i++) {
+            for (let n = i+1; n < numVertices; n++) {
+                // edge (i * numVertices) + n represents the edge from vertex i to vertex n
+                const pos_i = verticesRef.current[i].getCartesian()
+                const pos_n = verticesRef.current[n].getCartesian()
+
+                const dist = pointDistance(new Vector3(...pos_i), new Vector3(...pos_n))
+
+                tempObjectEdge.position.setX(MathUtils.lerp(pos_i[0], pos_n[0], 0.5))
+                tempObjectEdge.position.setY(MathUtils.lerp(pos_i[1], pos_n[1], 0.5))
+                tempObjectEdge.position.setZ(MathUtils.lerp(pos_i[2], pos_n[2], 0.5))
+
+
+                if (dist > 15) {
+                    tempObjectEdge.scale.setX(0)
+                    tempObjectEdge.scale.setY(0)
+                    tempObjectEdge.scale.setZ(0)
+                } else {
+                    tempObjectEdge.scale.setX(dist /100)
+                    tempObjectEdge.scale.setY(dist/ 100)
+                    tempObjectEdge.scale.setZ(dist)
+                    tempObjectEdge.lookAt(...pos_n)
+                }
+                //what if we put edge at the midpoint between i and n
+
+
+                tempObjectEdge.updateMatrix();
+
+                edgeRef.current.setMatrixAt((i * numVertices) + n, tempObjectEdge.matrix)
+            }
+        }
+        edgeRef.current.instanceMatrix.needsUpdate = true;
+
+        //END UPDATE EDGES
     })
 
-    //We need to handle the edges. How will we do this?
-        //the first numVertices children will correspond to vertex 1
-        //then the next numVertices will be for vertex 2
-        //and so on
     return <group>
-        <group ref={groupRef}>
-            {Array(numVertices).fill(0).map((_, index) => {
-                return <mesh key={index}>
-                    <sphereGeometry args={[0.1]}/>
-                    <meshNormalMaterial/>
-                </mesh>
-            })}
-        </group>
-        {/*<mesh>*/}
-        {/*    <sphereGeometry args={[radius]}/>*/}
-        {/*    <meshNormalMaterial/>*/}
-        {/*</mesh>*/}
-        <group ref={edgesRef}>
-            {Array(numVertices ** 2).fill(0).map((_, index) => {
-                return <line key={index}>
-                    <lineBasicMaterial color={0xFF0000} transparent={true}/>
-                    <bufferGeometry>
-                        <bufferAttribute
-                            needsUpdate
-                            attach={"position"}
-                            array={new Float32Array(6).fill(0)}
-                            itemSize={3}
-                        />
-                    </bufferGeometry>
-                </line>
-            })}
-        </group>
-    </group>
-}
-
-
-//to mutate buffer geometry
-// const position = new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z])
-// const br =  new BufferAttribute(position, 3)
-// br.needsUpdate = true
-// mesh.geometry.setAttribute('position', br)
-function GetGeometry({data, r}) {
-
-    const out = []
-    for (let i = 0; i < data.length; i++) {
-        out.push(<mesh position={data[i]} key={i*4}>
+        <instancedMesh
+            args={[null, null, numVertices]}
+            ref={meshRef}
+        >
+            <sphereGeometry args={[1]}/>
             <meshBasicMaterial color={"red"}/>
-            <sphereGeometry args={[r]}/>
-        </mesh>)
-        // out.push(i < data.length-1 ? <Line key={i*4+1} points={ [data[i], data[i + 1]]} color={"black"} lineWidth={5}></Line> : null)
-        // out.push(i < data.length-2 ? <Line key={i*4+2} points={[data[i], data[i + 2]]} color={"black"} lineWidth={5}></Line> : null)
-        // out.push(i < data.length-3 ? <Line key={i*4+3} points={[data[i], data[i + 3]]} color={"black"} lineWidth={5}></Line> : null)
+        </instancedMesh>
 
-        out.push(i < data.length - 1 ? <line key={i*4+1}>
-            {/*<Helper ></Helper>*/}
-            <bufferGeometry>
-                <bufferAttribute
-                    needsUpdate
-                    attach={"position"}
-                    array = {new Float32Array(6).fill(0)}
-                    itemSize = {3}
-                />
-            </bufferGeometry>
-            <lineBasicMaterial color={"red"}/>
-        </line> : null)
-        out.push(i < data.length - 2 ? <line key={i * 4 + 2}>
-            <bufferGeometry>
-                <bufferAttribute
-                    needsUpdate
-                    attach={"position"}
-                    array={new Float32Array(6).fill(0)}
-                    itemSize={3}
-                />
-            </bufferGeometry>
-            <lineBasicMaterial color={"red"}/>
-        </line> : null)
-        out.push(i < data.length - 3 ? <line key={i * 4 + 3}>
-            <bufferGeometry>
-                <bufferAttribute
-                    needsUpdate
-                    attach={"position"}
-                    array={new Float32Array(6).fill(0)}
-                    itemSize={3}
-                />
-            </bufferGeometry>
-            <lineBasicMaterial color={"red"}/>
-        </line> : null)
+        <instancedMesh
+            args={[null, null, numVertices * numVertices]}
+            ref={edgeRef}
+        >
+            <boxGeometry args={[1,1,1]}/>
+            <meshBasicMaterial color={"blue"}/>
 
-    }
-    return out
+        </instancedMesh>
+    </group>
 
 }
+
+
