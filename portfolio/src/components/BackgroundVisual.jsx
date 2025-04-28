@@ -13,99 +13,173 @@ import {Helper, Instance, Instances, Line} from "@react-three/drei";
 import {LineGeometry} from "three-stdlib";
 import {invalidate, useFrame} from "@react-three/fiber";
 
-export default function BackgroundVisual({
-    clusterRadius=100,
-    numVertices = 10,
-    vertexRadius = 1,
-    color = "red",
-}) {
+const signedRand = () => Math.random() - 0.5
+const pointDistance  = (p1, p2) => (((p1.x - p2.x) ** 2) + ((p1.y - p2.y) ** 2) + ((p1.z - p2.z) ** 2)) ** 0.5
 
+class spherePoint {
+    constructor(theta, phi, rho) {
+        this.theta = theta
+        this.phi = phi
+        this.rho = rho
 
-    const randSigned = () => Math.random() - 0.5
+        this.vTheta = 0;
+        this.vPhi = 0;
 
+        this.efficiency = 0.99;
+    }
 
+    getCartesian() {
+        return new Vector3(
+            this.rho * Math.cos(this.theta) * Math.sin(this.phi),
+            this.rho * Math.sin(this.theta) * Math.sin(this.phi),
+            this.rho * Math.cos(this.phi)
+        )
+    }
 
+    accelerate(theta_, phi_, delta) {
+        this.vTheta += theta_ * delta * 10;
+        this.vPhi += phi_ * delta * 10;
+    }
 
-    //We will create 100 random vertices, each of which will have connections to up to three other vertices
-    //connected vertices will have edges drawn to eachother
-    //and will try to keep a certain distance from eachother
-    //We will generate our vertices into an array
-    //And assume there is an edge from each vertex to the next 3 vertices
-
-
-    const vertices = Array(numVertices).fill(0).map(() => new Vector3(randSigned() * clusterRadius, randSigned() * clusterRadius, randSigned() * clusterRadius));
-
-    return <Vertices data={vertices} r={vertexRadius}></Vertices>
-
+    tick(delta) {
+        this.theta += this.vTheta * delta;
+        this.phi += this.vPhi * delta;
+        this.vTheta *= this.efficiency;
+        this.vPhi *= this.efficiency;
+    }
 }
 
-function Vertices({data, r}) {
-    const dataRef = useRef(data)
-    const ref = useRef()
+class sphereVisual {
+    constructor(radius=10,
+                numVertices = 10,
+                edgeDistance = 1,
+                groupRef,
+                edgesRef
+    ) {
+        //meshRef should be a ref to the object which has the vertex meshes as children
+        this.vertices = Array(numVertices).fill(0).map((_) => new spherePoint(Math.random() * 2 * Math.PI,Math.random() * Math.PI,radius))
+        this.groupRef = groupRef;
+        this.edgesRef = edgesRef;
+        this.numVertices = numVertices;
+        this.numEdges = numVertices ** 2;
+    }
 
-    //the edges that follow the Ith vertex of ref.current.children correspond to the lines
-    //which go from vertex I to vertex I+1, then  from vertex I to vertex I+2, then from vertex I to vertex I+3 respectively
-    //We go through the vertices first, applying our desired deltas to each one
-    //Then, go through the entire list of children
-        //for each of the lines we encounter we simply use setPosition or setFromPoints on the line's geometry to update it to the new deltas
+    handleMotion(delta) {
 
-    const signedRand = () => Math.random() - 0.5
+        if (this.vertices.length != this.groupRef.current.children.length) {return;}
 
-    useFrame( (state, delta, frame) => {
-        let vertices = []
-        let edges=[]
-        ref.current.children.forEach((child) => {
-            if (child.geometry.type == "SphereGeometry") {
-                // console.log( child.position)
-                child.position.x += signedRand() * delta * 10
-                child.position.y += signedRand() * delta* 10
-                child.position.z += signedRand() * delta * 10
-                vertices.push(child)
-                // console.log("vert: ", child)
-            } else {
-                // console.log("edge", ecount, child.geometry.attributes.instanceStart.data.array)
-                // console.log("edge: ", child)
-                edges.push(child)
+        for (let i = 0; i < this.vertices.length; i++) {
+            this.vertices[i].accelerate(signedRand(), signedRand(), delta)
+            this.vertices[i].tick(delta)
 
-            }
-        })
-        console.log(edges)
-        //adjust edges to match changed vertices
+            const cartesian = this.vertices[i].getCartesian()
+            this.groupRef.current.children[i].position.setX(cartesian.x)
+            this.groupRef.current.children[i].position.setY(cartesian.y)
+            this.groupRef.current.children[i].position.setZ(cartesian.z)
+        }
+        // console.log("num vertices: ", this.vertices.length)
+        // console.log("num children: ", this.groupRef.current.children.length);
+    }
 
-        // const a = vertices[vert].position
-        // const b = vertices[vert + 1 + (i % 3)].position
-        // edges[i].geometry.setAttribute('position', new BufferAttribute(new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z]), 3))
-
-        let edge = 0
-        for (let v = 0; v < vertices.length && edge < edges.length; v++) {
-            //vertex v has an edge w the next three vertices
-
-            const a = vertices[v].position
-            //
-                for (let n = 1; n < 4 && v+n < vertices.length; n++) {
-                    const b = vertices[v+n].position
-
-
-                    // console.log("edge:", edge+n-1, "a:", v, "b:", v+n)
-                    const position = new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z])
-                    const br =  new BufferAttribute(position, 3)
-                    br.needsUpdate = true
-                    // br.onUploadCallback = () => {console.log('how')}
-                    edges[edge+n-1].geometry.setAttribute('position', br)
-                    // edges[edge+n-1].geometry.setIndex(indices)
-                    // edges[edge+n-1].geometry.attributes.position.needsUpdate = true
-                }
-            edge+=3;
+    //to mutate buffer geometry
+// const position = new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z])
+// const br =  new BufferAttribute(position, 3)
+// br.needsUpdate = true
+// mesh.geometry.setAttribute('position', br)
+    updateEdges() {
+        // console.log("nominal edges:", this.vertices.length ** 2)
+        // console.log("real edges: ", this.edgesRef.current.children.length)
+        if (this.numEdges != this.edgesRef.current.children.length) {
+            return;
         }
 
-        // state.invalidate()
+        for (let i = 0; i < this.numVertices; i++) {
+            for (let n = 0; n < this.numVertices; n++) {
+
+                if (i != n) { //update edge from i to n
+                    const p1 = this.vertices[i].getCartesian();
+                    const p2 = this.vertices[n].getCartesian();
+                    const position = new Float32Array([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z])
+                    const temp = new BufferAttribute(position, 3)
+                    temp.needsUpdate = true;
+                    this.edgesRef.current.children[(i * this.numVertices) + n].geometry.setAttribute('position', temp)
+
+                    // const mat = new LineBasicMaterial({color: 0x00FF00, transparent: true})
+                    // mat.opacity = 0.1
+                    this.edgesRef.current.children[(i * this.numVertices) + n].material.opacity = Math.min(1, Math.max(0, 10 - pointDistance(p1,p2)))
+                    this.edgesRef.current.children[(i * this.numVertices) + n].needsUpdate = true
+                    // console.log(this.edgesRef.current.children[(i * this.numVertices) + n].material)
+                }
+
+            }
+        }
+    }
+}
+
+export default function BackgroundVisual({
+    radius = 10,
+    numVertices = 25,
+    edgeDistance = 1
+}) {
+
+    //Goal: Facilitate a visual where a given number of vertices move around the surface of a sphere in a natural motion
+    //Edges will be drawn between vertices with opacity greater as the distance is closer to edgeDistance
+    //Points will be processed in spherical coordinates and converted into cartesian when necessary
+
+    const groupRef = useRef();
+    const edgesRef = useRef();
+    const controllerRef = useRef(new sphereVisual(radius, numVertices, edgeDistance, groupRef, edgesRef));
+
+    useFrame((state, delta, frame) => {
+        controllerRef.current.handleMotion(delta)
+
+        if (Math.random() > 0.5){
+            controllerRef.current.updateEdges()
+
+        }
     })
 
-    return <group ref={ref}>
-        <GetGeometry data={data} r={r}></GetGeometry>
+    //We need to handle the edges. How will we do this?
+        //the first numVertices children will correspond to vertex 1
+        //then the next numVertices will be for vertex 2
+        //and so on
+    return <group>
+        <group ref={groupRef}>
+            {Array(numVertices).fill(0).map((_, index) => {
+                return <mesh key={index}>
+                    <sphereGeometry args={[0.1]}/>
+                    <meshNormalMaterial/>
+                </mesh>
+            })}
+        </group>
+        {/*<mesh>*/}
+        {/*    <sphereGeometry args={[radius]}/>*/}
+        {/*    <meshNormalMaterial/>*/}
+        {/*</mesh>*/}
+        <group ref={edgesRef}>
+            {Array(numVertices ** 2).fill(0).map((_, index) => {
+                return <line key={index}>
+                    <lineBasicMaterial color={0xFF0000} transparent={true}/>
+                    <bufferGeometry>
+                        <bufferAttribute
+                            needsUpdate
+                            attach={"position"}
+                            array={new Float32Array(6).fill(0)}
+                            itemSize={3}
+                        />
+                    </bufferGeometry>
+                </line>
+            })}
+        </group>
     </group>
 }
 
+
+//to mutate buffer geometry
+// const position = new Float32Array([a.x,a.y,a.z,b.x,b.y,b.z])
+// const br =  new BufferAttribute(position, 3)
+// br.needsUpdate = true
+// mesh.geometry.setAttribute('position', br)
 function GetGeometry({data, r}) {
 
     const out = []
@@ -128,7 +202,7 @@ function GetGeometry({data, r}) {
                     itemSize = {3}
                 />
             </bufferGeometry>
-            <primitive object={new LineBasicMaterial()} attach={"material"}/>
+            <lineBasicMaterial color={"red"}/>
         </line> : null)
         out.push(i < data.length - 2 ? <line key={i * 4 + 2}>
             <bufferGeometry>
@@ -139,7 +213,7 @@ function GetGeometry({data, r}) {
                     itemSize={3}
                 />
             </bufferGeometry>
-            <primitive object={new LineBasicMaterial()} attach={"material"}/>
+            <lineBasicMaterial color={"red"}/>
         </line> : null)
         out.push(i < data.length - 3 ? <line key={i * 4 + 3}>
             <bufferGeometry>
@@ -150,7 +224,7 @@ function GetGeometry({data, r}) {
                     itemSize={3}
                 />
             </bufferGeometry>
-            <primitive object={new LineBasicMaterial()} attach={"material"}/>
+            <lineBasicMaterial color={"red"}/>
         </line> : null)
 
     }
