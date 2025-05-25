@@ -1,6 +1,6 @@
 import {useRef} from "react";
 import {
-    MathUtils, Object3D, Raycaster, Vector3,
+    Color, MathUtils, Object3D, Raycaster, Vector3,
 } from "three";
 import {useFrame, useThree} from "@react-three/fiber";
 const pointDistance  = (p1, p2) => Math.sqrt(((p1[0] - p2[0]) ** 2) + ((p1[1] - p2[1]) ** 2) + ((p1[2] - p2[2]) ** 2))
@@ -25,13 +25,26 @@ class spherePoint {
     accelerate(theta_, phi_, delta) {
         this.vTheta += theta_ * delta * 10;
         this.vPhi += phi_ * delta * 10;
+
+        this.vTheta %= 2 * Math.PI;
+        this.vPhi %= Math.PI
     }
 
     tick(delta) {
         this.theta %= Math.PI * 2
         this.phi %= Math.PI * 2
+
+
         this.vTheta %= Math.PI * 2
-        this.vPhi %= Math.PI * 2
+        this.vPhi %= Math.PI
+
+        if (this.vTheta > 0) {this.vTheta = Math.min(0.25, this.vTheta)}
+        else {this.vTheta = Math.max(-0.25, this.vTheta)}
+
+        if (this.vPhi > 0) {this.vPhi = Math.min(0.25, this.vPhi)}
+        else {this.vPhi = Math.max(-0.25, this.vPhi)}
+
+
         this.theta += this.vTheta * delta;
         this.phi += this.vPhi * delta;
         this.vTheta *= this.efficiency;
@@ -41,9 +54,9 @@ class spherePoint {
 
 export default function BackgroundVisual({
         radius = 50,
-        numVertices = 250,
+        numVertices = 500,
         edgeDistance = 1,
-        maxEdgeLen = 25,
+        maxEdgeLen = 15,
     }) {
 
     const tempObject = new Object3D()
@@ -57,6 +70,8 @@ export default function BackgroundVisual({
     const raycaster = useRef(new Raycaster())
     const lastHoverRef = useRef(new Vector3(0,0,0))
 
+    const scene = useThree().scene
+    scene.background = new Color(0x020202)
 
     const camera = useThree(state => state.camera)
     const cartesianToSpherical = ({x, y, z}) => {
@@ -74,9 +89,9 @@ export default function BackgroundVisual({
 
 
 
-        helperRef.current.position.x = lastHoverRef.current.x
-        helperRef.current.position.y = lastHoverRef.current.y
-        helperRef.current.position.z = lastHoverRef.current.z
+        // helperRef.current.position.x = lastHoverRef.current.x
+        // helperRef.current.position.y = lastHoverRef.current.y
+        // helperRef.current.position.z = lastHoverRef.current.z
         //we now have a way of detecting hovers using vertices and edges
         //maybe we can with transparent sphere instead
         //now, for each vertex, we get the direction from vertex to hover point
@@ -84,12 +99,37 @@ export default function BackgroundVisual({
         //convert vertex to spherical
         //simply subtract the hover phi,theta from vertex, then apply that delta to acceleration
 
-
+        let [hoverTheta, hoverPhi] = cartesianToSpherical(lastHoverRef.current)
+        hoverTheta %= Math.PI * 2
+        hoverPhi %= Math.PI
 
             //UPDATE VERTICES
         let tempPos;
         for (let i = 0; i < numVertices; i++) {
-            verticesRef.current[i].accelerate(MathUtils.randFloatSpread(0.5 ), MathUtils.randFloatSpread(0.5 ), delta )
+
+            let dtheta = MathUtils.randFloatSpread(0.5 )
+            let dphi = MathUtils.randFloatSpread(0.5 )
+
+
+            //phi is broken because its only 0-180
+            //it needs to be handled differently depending on theta
+            //theta should be working fine though
+            const pdist = (pointDistance([
+                lastHoverRef.current.x,
+                lastHoverRef.current.y,
+                lastHoverRef.current.z,
+            ], verticesRef.current[i].getCartesian()))
+
+        if (pdist < radius / 3) {
+                dtheta =  (hoverTheta % Math.PI *2> Math.PI ? 1 : -1 ) *(hoverPhi % Math.PI > Math.PI / 2  ? -1 : 1 ) * ((verticesRef.current[i].theta % (Math.PI * 2)) - (hoverTheta % (Math.PI * 2)) ) * 500
+                dphi =(hoverPhi % Math.PI > Math.PI / 2  ? -1 : 1 ) *   (hoverTheta % Math.PI *2> Math.PI ? 1 : -1 ) * ((hoverPhi  % Math.PI)- (verticesRef.current[i].phi % (Math.PI))) * 500
+            }
+
+            dtheta = Math.min(0.5, dtheta)
+            dphi = Math.min(0.5, dphi)
+            // if (lastHoverRef.current != new Vector3(0,0,0)) {console.log('aaa')}
+
+            verticesRef.current[i].accelerate(dtheta, dphi , delta )
             verticesRef.current[i].tick(delta )
             tempPos = verticesRef.current[i].getCartesian()
             tempObject.position.set(...tempPos)
@@ -118,7 +158,7 @@ export default function BackgroundVisual({
                     tempObjectEdge.position.setZ(MathUtils.lerp(pos_i[2], pos_n[2], 0.5))
                 }
 
-                if (n <= i || dist > 25) {
+                if (n <= i || dist > maxEdgeLen) {
                     tempObjectEdge.scale.setX(0)
                     tempObjectEdge.scale.setY(0)
                     tempObjectEdge.scale.setZ(0)
@@ -141,30 +181,34 @@ export default function BackgroundVisual({
         <instancedMesh
             args={[null, null, numVertices]}
             ref={meshRef}
-            onPointerMove={
-                (e) => {lastHoverRef.current = e.point}
-            }
+            // onPointerMove={
+            //     (e) => {lastHoverRef.current = e.point}
+            // }
         >
 
             <sphereGeometry args={[0.25]}/>
-            <meshBasicMaterial color={"red"}/>
+            <meshBasicMaterial color={0xFFFFFF}/>
         </instancedMesh>
 
         <instancedMesh
             args={[null, null, (numVertices * numVertices) - 1]}
             ref={edgeRef}
-            onPointerMove={
-                (e) => {lastHoverRef.current = e.point}
-            }
+
         >
             <boxGeometry args={[1,1,1]}/>
-            <meshBasicMaterial color={"blue"}/>
+            <meshBasicMaterial color={0xFFFFFF}/>
 
         </instancedMesh>
 
-        <mesh ref={helperRef}>
-            <boxGeometry args={[2,2,2]}/>
-            <meshNormalMaterial/>
+
+        <mesh
+            // onPointerMove = {(e) => {lastHoverRef.current = e.point}}
+            onPointerMove = {(e) => { lastHoverRef.current = e.point}}
+            // onPointerLeave = {(e) => {lastHoverRef.current = new Vector3(0,0,0)}}
+            visible={false}
+        >
+            <sphereGeometry args={[radius]}/>
+            <meshBasicMaterial color={"green"}/>
         </mesh>
     </group>
 

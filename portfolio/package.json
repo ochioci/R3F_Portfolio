@@ -9,14 +9,24 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
+  ".": {
+    "import": ""
+  },
   "dependencies": {
     "@react-three/drei": "^10.0.6",
     "@react-three/fiber": "^9.1.2",
     "@react-three/postprocessing": "^3.0.4",
+    "@whatisjery/react-fluid-distortion": "^1.4.4",
+    "leva": "^0.10.0",
+    "postprocessing": "^6.37.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.175.0",
-    "three-stdlib": "^2.35.15"
+    "three-stdlib": "^2.35.15",
+    "tunnel-rat": "^0.1.2",
+    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-glsl": "^1.4.1",
+    "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
